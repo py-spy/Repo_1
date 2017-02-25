@@ -1,0 +1,2084 @@
+#Prosper Loan Data - An Exploration 
+
+####by Meenakshi Abbaraju
+
+
+
+Prosper Marketplace, Inc. is a San Francisco, California-based company in the peer-to-peer lending industry. Prosper Funding LLC, one of its subsidiaries, operates Prosper.com, a website where individuals can either invest in personal loans or request to borrow money. The Prosper Loan Dataset was provided by Udacity. Here, I attempt to explore the data and present visualizations after analysis.
+
+I began by loading all the libraries required for the analysis followed by reading the csv file.
+
+```{r echo=FALSE, warning=FALSE, message=FALSE }
+
+# Load all of the packages that you end up using
+# in your analysis in this code chunk.
+
+# Notice that the parameter "echo" was set to FALSE for this code chunk.
+# This prevents the code from displaying in the knitted HTML output.
+# You should set echo=FALSE for all code chunks in your file.
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(gridExtra)
+library(lubridate)
+library(ggthemes)
+library(viridis)
+library(GGally)
+
+```
+
+```{r echo=FALSE, Load_the_Data, message=FALSE, warning=FALSE}
+# Load the Data
+# Load the Data
+Loan_data <- read.csv('prosperLoanData.csv')
+```
+
+##Structure of Loan Data 
+
+It was found that data frame consists of 113937 observations of 81 variables. This is an enormous dataset. I decided to choose certain columns and work exclusively on them. My new dataframe consists of 21 variables. The variables chosen were: 'Term', 'LoanStatus', 'BorrowerAPR', 'BorrowerRate', 'ListingCategory..numeric.', 'BorrowerState', 'Occupation', 'EmploymentStatus', 'EmploymentStatusDuration', 'IsBorrowerHomeowner', 'CreditScoreRangeLower','CreditScoreRangeUpper', 'CurrentCreditLines', 'AvailableBankcardCredit', 'DebtToIncomeRatio', 'IncomeRange', 'IncomeVerifiable', 'StatedMonthlyIncome', 'LoanOriginalAmount', 'LoanOriginationDate', 'MonthlyLoanPayment'.
+
+# Univariate Plots Section
+
+```{r  echo=FALSE, warning=FALSE, message=FALSE, Structure}
+
+#summary(Loan_data)
+#str(Loan_data)
+cols_chosen <- c ('Term', 'LoanStatus', 'BorrowerAPR', 'BorrowerRate', 'ListingCategory..numeric.', 'BorrowerState', 'Occupation', 'EmploymentStatus', 'EmploymentStatusDuration', 'IsBorrowerHomeowner', 'CreditScoreRangeLower','CreditScoreRangeUpper', 'CurrentCreditLines', 'AvailableBankcardCredit', 'DebtToIncomeRatio', 'IncomeRange', 'IncomeVerifiable', 'StatedMonthlyIncome', 'LoanOriginalAmount', 'LoanOriginationDate', 'MonthlyLoanPayment')
+pl <- Loan_data[cols_chosen]
+str(pl)
+
+```
+
+
+I will set "Term" variable as factors so as to be able to plot it as discrete values. I created a Status variable which stores the factored Loan Status. The other two variables created were:
+
+PayByFees : Log of Ratio of StatedMonthlyIncome to MonthlyLoanPayment
+FeesByPay: Ratio of Monthly Loan Payment to StatedMonthlyIncome
+
+
+```{r   echo=FALSE, warning=FALSE, message=FALSE,Factor_term_and_ListingCategory}
+#'Factor' the 'term' 
+pl$Term <- factor(pl$Term)
+
+
+pl <- pl %>% mutate(Status = ifelse(LoanStatus %in%
+                                    c("Chargedoff", "Defaulted"),0, 
+                                    ifelse(LoanStatus %in%
+                                    c("Completed", "Current", 
+                                      "FinalPaymentInProgress"), 2,
+                                    ifelse(LoanStatus %in% 
+                                             "Cancelled", 3,1))))
+pl$Status <- factor(pl$Status, levels = 0:3,
+                    labels = c("Defaulted",
+                               "Past Due",
+                               "Current or Paid",
+                               "Cancelled"))
+pl$PayByFees <- (log(pl$StatedMonthlyIncome/pl$MonthlyLoanPayment) )
+pl$FeesByPay <- (pl$MonthlyLoanPayment/ pl$StatedMonthlyIncome)
+
+#I created a new variable called Due that contains all the Past Due, Defaulted and Chargedoff values. 
+pl$Due <- ifelse( pl$LoanStatus == "Defaulted" |
+                  pl$LoanStatus == "Chargedoff" |
+                  pl$LoanStatus == "Past Due (1-15 days)" |
+                  pl$LoanStatus == "Past Due (15-30 days)" |
+                  pl$LoanStatus == "Past Due (61-90 days)" |
+                  pl$LoanStatus == "Past Due (91-120 days)" |
+                  pl$LoanStatus == "Past Due (>120 days)",                                                                          1, 0)
+summary(pl)
+```
+
+
+
+##Exploration of the variables 
+
+###Term
+
+It is seen from the plot that there are three terms viz. 1, 3 & 5 years. The three-year term is the most common.
+
+```{r   echo=FALSE, warning=FALSE, message=FALSE,Term_hist}
+ggplot(aes(x= Term), data = pl) +
+  geom_bar(fill = I('#2B83BA')) +
+  ggtitle("Term Histogram") +
+  xlab("Term (Months)") + ylab("Count")
+
+```
+
+###Borrower Rate & APR:
+
+The plots are more or less similar, skewed on the right. The peak is at 0.36.  
+0.3177 is the most common rate which was found by grouping and summarising on the Borrower Rate.
+
+```{r  echo=FALSE, warning=FALSE, message=FALSE, Borrower_RateHist}
+
+br1<-
+ggplot(aes(x= BorrowerAPR ), 
+       data = subset(pl, !is.na(BorrowerAPR))) +
+  geom_histogram(bins=100, fill = I("#2B83BA")) +
+  #facet_wrap(~IncomeRange) +
+  ggtitle("BorrowerAPR Histogram") +
+  xlab("Borrower APR(Annual%)") + ylab("Count")
+  
+br2<-
+ggplot(aes(x = BorrowerRate), 
+       data = subset(pl, !is.na(BorrowerRate))) +
+  geom_histogram(bins=100, fill = I('#099DD9')) +
+  #facet_wrap(~IncomeRange) +
+  ggtitle("BorrowerRate Histogram") +
+  xlab("Borrower Rate (%)") + ylab("Count")
+
+grid.arrange(br1,br2, ncol =2)
+```
+
+
+```{r echo=FALSE, Borrower_Rate, message=FALSE, warning=FALSE}
+# Popular borrower rates 
+pl %>% group_by(BorrowerRate) %>% 
+       summarise(n = n()) %>% 
+       arrange(desc(n)) %>% 
+       head(5)
+```
+ 
+###Debt To Income Ratio:
+
+Most of the values lie between 0 and 1 in the histogram for DebtToIncome Ratio. 
+
+```{r  echo=FALSE, warning=FALSE, message=FALSE, Income_Ratio_Hist}
+# Debt to Income Ratio
+
+di1 <-
+ggplot(aes(x = DebtToIncomeRatio ), 
+       data = subset(pl, !is.na(DebtToIncomeRatio))) +
+  geom_histogram(bins = 500, fill = I('#ABDDA4')) +
+  scale_x_sqrt() +
+  ggtitle("Debt to Income Ratio Histogram") + 
+  xlab("Debt To Income Ratio") + ylab("Count")
+
+di2<-
+ggplot(aes(x = DebtToIncomeRatio ), 
+       data = subset(pl, 
+                     !is.na(DebtToIncomeRatio) &
+                      DebtToIncomeRatio <= 1)) +
+  geom_histogram(bins = 200, fill = I('#ABDDA4')) +
+  scale_x_sqrt() +
+  ggtitle("Debt to Income Ratio Histogram") + 
+  xlab("Debt To Income Ratio") + ylab("Count")
+
+grid.arrange(di1, di2, ncol = 1)
+
+
+```
+
+Being curious, I facet-wrapped it by Income range and noticed that the $1-25K income range has a few ratios which exceed 1. This shows that people of that group have the maximum DebtToIncome ratio. This is not abnormal. The plot corroborated what I had guessed out of common knowledge.
+
+
+```{r   echo=FALSE, warning=FALSE, message=FALSE,Income_Ratio_Faceted_Hist}
+ggplot(aes(x = DebtToIncomeRatio ), 
+       data = subset(pl, !is.na(DebtToIncomeRatio) &
+                          DebtToIncomeRatio <= 1 )) +
+  geom_histogram(bins = 100, fill = I('#ABDDA4')) +
+  scale_x_sqrt() +
+  facet_wrap(~IncomeRange) +
+  ggtitle("Debt to Income Ratio Histogram") + 
+  xlab("Debt To Income Ratio") + ylab("Count")
+
+```
+
+###LoanOriginationDate:
+
+I have created two new variables(using lubridate) to store the Year and Month of the loan creation date.There is a dip in 2008-2009. Slowly, the loans again started to pick up in 2011 and 2012. The Loans as per the histogram peaked in the latter part of 2013 and earlier 2014.
+
+
+```{r   echo=FALSE, warning=FALSE, message=FALSE,Term_LoanamtHist}
+pl_term <- pl %>%
+  group_by(Term) %>%
+  summarise(LoanSum = sum(as.numeric(LoanOriginalAmount)),
+            LoanMean= mean(as.numeric(LoanOriginalAmount)),
+            LoanMedian = median(as.numeric(LoanOriginalAmount)),
+            Count = n()) %>%
+  arrange(Term)
+
+arrange(pl_term, desc(Count))
+# LoanOriginatoinMonth variable
+pl$LoanOriginationMonth <- month(pl$LoanOriginationDate)
+#LoanOriginationYear variable
+pl$LoanOriginationYear <- year(pl$LoanOriginationDate)
+
+#Histogram of LoanOrignationMonth faceted by year
+ggplot( aes(x = LoanOriginationMonth), data = pl) +
+  geom_histogram(stat = "bin", binwidth = 1, fill = I('#FDAE61')) +
+  scale_x_discrete(limits = c(1:12)) +
+  #scale_x_sqrt() +
+  facet_wrap(~LoanOriginationYear, ncol = 5) +
+  ggtitle( "Loan Origination Month Histogram") +
+  xlab("Loan Origination Month") + ylab("Count")
+  
+```
+
+###Employment Status Duration:
+
+There is a positive skew to the plot. The square root is applied to get a clearer picture of the skew. More people have shorter employment duration. This is definitely not good, since the chance of repayment of debt decreases.
+
+
+```{r  echo=FALSE, warning=FALSE, message=FALSE, EmploymentStatusDurationHist}
+
+emp1 <-
+ggplot(aes(x = EmploymentStatusDuration), 
+       data = subset(pl, !is.na(EmploymentStatusDuration))) +
+    geom_histogram(bins=100, fill = I('#FFFFBF')) +
+    ggtitle("EmploymentStatusDuration Histogram") +
+    xlab("Employment Status Duration") + ylab("Count")
+    
+emp2<-    
+ggplot(aes(x = EmploymentStatusDuration), 
+       data = subset(pl, !is.na(EmploymentStatusDuration)) ) +
+    geom_histogram(bins=100, fill = I('#FFFFBF')) +
+    scale_x_sqrt() +
+    ggtitle("EmploymentStatusDuration Histogram (Square Rooted)") +
+    xlab("Employment Status Duration (sqrt)") + ylab("Count")
+    
+grid.arrange(emp1, emp2, ncol = 2) 
+
+```
+
+###Credit Score Ranges (lower and upper):
+
+Both the credit score ranges produce, more or less a similar plot. I took a closer look by setting xlim for both lower and upper credit scores. All the distributions are normal.
+
+
+```{r   echo=FALSE, warning=FALSE, message=FALSE,CreditScoreRangeHist}
+cs1<- 
+ggplot(aes(x = CreditScoreRangeLower), 
+       data = subset(pl, !is.na(CreditScoreRangeLower))) +
+    geom_histogram(bins=100, fill = I('#D7191C')) +
+    xlim(400,800)+
+    ggtitle("CreditScoreRangeLower Histogram") +
+    xlab("Credit Score Range - Lower") + ylab("Count")
+
+
+cs3<-
+ggplot(aes(x = CreditScoreRangeUpper), 
+       data = subset(pl, !is.na(CreditScoreRangeUpper))) +
+    geom_histogram(bins=100, fill = I('#ABDDA4')) +
+    xlim(400,800)+
+    ggtitle("CreditScoreRangeLower Histogram") +
+    xlab("Credit Score Range - Upper") + ylab("Count")
+
+
+
+grid.arrange(cs1,cs3,ncol=2)
+```
+
+
+###Current Credit Lines & Available Bankcard Credit:
+
+The current credit lines faceted by Income Range doesn't show anything concrete except that it is highest in $25 K to $75 K. For the logical flow of discussion, I added these facet-wrapped plots here, though technically they are not univariate.
+
+
+```{r  echo=FALSE, warning=FALSE, message=FALSE, CreditlinesHist}
+
+ 
+ggplot(aes(x = CurrentCreditLines), 
+       data = subset(pl, !is.na(CurrentCreditLines))) +
+    geom_histogram(binwidth= 1, fill = "peachpuff3") +
+    facet_wrap(~IncomeRange) +
+    scale_x_sqrt() +
+    ggtitle("Current Credit Lines Histogram") +
+    xlab("Current Credit Lines") + ylab("Count")
+
+
+ggplot(aes(x = AvailableBankcardCredit), 
+       data = subset(pl, !is.na(AvailableBankcardCredit)) ) +
+    geom_histogram(binwidth= 1, fill = "slateblue3" ) +
+    facet_wrap(~IncomeRange) +
+    scale_x_sqrt() +
+    ylim(0,500) +
+    #scale_y_log10() +
+    ggtitle("Available Bank Card Credit Histogram") +
+    xlab("Available Bank Card Credit") + ylab("Count")
+
+#grid.arrange(cl1,cl2, ncol=1)
+
+
+```
+
+
+###Stated Monthly Income:
+
+The following are six different plots providing different ranges of Stated Monthly Income.
+
+
+```{r   echo=FALSE, warning=FALSE, message=FALSE,StateMonthlycomeInHist}
+
+sm1<-
+ggplot(aes(x = StatedMonthlyIncome), 
+       data = subset(pl, !is.na(StatedMonthlyIncome))) +
+    geom_histogram(binwidth=100, fill = I('#FF99FF')) +
+    #facet_wrap(~IncomeRange) +
+    #scale_x_sqrt() +
+    xlim(0,40000) +
+    #scale_y_log10() +
+    ggtitle("Monthly Income (USD)") +
+    xlab("Stated Monthly Income - USD") + ylab("Count")
+
+
+sm2<-
+ggplot(aes(x = StatedMonthlyIncome), 
+       data = subset(pl, (StatedMonthlyIncome > 20000 & 
+                            !is.na(StatedMonthlyIncome))))  +
+    geom_histogram(binwidth=100, fill = I('#FF99FF')) +
+    #facet_wrap(~IncomeRange) +
+    scale_x_sqrt() +
+    #scale_y_log10() +
+    ggtitle("Monthly Income > 20000 USD") +
+    xlab("Stated Monthly Income > 20000 USD") + ylab("Count")
+
+sm3<-
+ggplot(aes(x = StatedMonthlyIncome), 
+       data = subset(pl,(StatedMonthlyIncome<20000 & 
+                           !is.na(StatedMonthlyIncome)))) +
+    geom_histogram(binwidth=100, fill = I('#FF99FF')) +
+    #facet_wrap(~IncomeRange) +
+    #scale_x_sqrt() +
+    #scale_y_log10() +
+    ggtitle("Monthly Income < 20000 USD") +
+    xlab("Stated Monthly Income < 20000 USD") + ylab("Count")
+
+sm4<-
+ggplot(aes(x = StatedMonthlyIncome), 
+       data = subset(pl,(StatedMonthlyIncome<10000 & 
+                           !is.na(StatedMonthlyIncome)))) +
+    geom_histogram(binwidth=100, fill = I('#FF99FF')) +
+    #facet_wrap(~IncomeRange) +
+    #scale_x_sqrt() +
+    #scale_y_log10() +
+    ggtitle("Monthly Income < 10000 USD") +
+    xlab("Stated Monthly Income < 10000 USD") + ylab("Count")
+
+sm5<-
+ggplot(aes(x = StatedMonthlyIncome), 
+       data = subset(pl,(StatedMonthlyIncome<5000 & 
+                           !is.na(StatedMonthlyIncome)))) +
+    geom_histogram(binwidth=100, fill = I('#FF99FF')) +
+    #facet_wrap(~IncomeRange) +
+    #scale_x_sqrt() +
+    #scale_y_log10() +
+    ggtitle("Monthly Income < 5000 USD") +
+    xlab("Stated Monthly Income < 5000 USD") + ylab("Count")
+
+sm6<-
+ggplot(aes(x = StatedMonthlyIncome), 
+       data = subset(pl,(StatedMonthlyIncome<1000 & 
+                           !is.na(StatedMonthlyIncome)))) +
+    geom_histogram(binwidth=100, fill = I('#FF99FF')) +
+    #facet_wrap(~IncomeRange) +
+    #scale_x_sqrt() +
+    #scale_y_log10() +
+    ggtitle("Monthly Income < 1000 USD") +
+    xlab("Stated Monthly Income < 1000 USD") + ylab("Count")
+
+grid.arrange(sm1,sm2,sm3,sm4,sm5,sm6, ncol = 2 )
+
+```
+
+
+###Monthly Loan Payment:
+
+The monthly loan payment peaks at around $200-300. This is quite normal. We do not expect them to run in thousands as no one capable of paying that amount would apply for a loan(under normal circumstances).
+
+
+```{r  echo=FALSE, warning=FALSE, message=FALSE, MonthlyLoanPaymentHist}
+mp1<-
+ggplot(aes(x = MonthlyLoanPayment), data = pl) +
+    geom_histogram(bins=100, fill = I('#0066FF')) +
+   #facet_wrap(~IncomeRange) +
+    ggtitle("Monthly Loan Payment Histogram") +
+    xlab("Monthly Loan Payment USD") + ylab("Count")
+mp2<-
+ggplot(aes(x = MonthlyLoanPayment), 
+       data = pl) +
+    geom_histogram(bins=100, fill = I('#0066FF')) +
+    #facet_wrap(~IncomeRange) +
+    scale_x_sqrt() +
+    ggtitle("Monthly Loan Payment Histogram (Sqrt)") +
+    xlab("Monthly Loan Payment USD-SquareRoot") + ylab("Count")
+
+grid.arrange(mp1,mp2, ncol = 1)
+```
+
+
+###Original Loan Amount:
+
+The plot is right skewed, peaking at $4000, $10000, $15000, $20000 $25000. The mean Loan amount was found to be $8337.
+
+
+```{r  echo=FALSE, warning=FALSE, message=FALSE, LoanAmountsummary}
+summary(pl$LoanOriginalAmount)
+
+```
+
+```{r   echo=FALSE, warning=FALSE, message=FALSE,LoanOriginalAmountHist}
+ggplot(aes(x = LoanOriginalAmount), 
+       data = pl) +
+    geom_histogram(bins=100, fill = I('#00FF4D')) +
+    #facet_wrap(~IncomeRange) +
+    ggtitle("Original Loan Amount Histogram") +
+    xlab("Original Loan Amount USD") + ylab("Count")
+
+```
+
+###Listing Category:
+
+The Listing Category represents the cause for taking the loan for eg, Wedding or vacation or Student use etc. 
+
+
+```{r   echo=FALSE, warning=FALSE, message=FALSE,ListingCategory}
+ctg <-  c('Not Available', 'Debt Consolidation', 'Home Improvement',
+                'Business', 'Personal Loan', 'Student Use', 'Auto', 'Other',
+                'Baby&Adoption','Boat', 'Cosmetic Procedure','Engagement Ring',
+                'Green Loans', 'Household Expenses', 'Large Purchases',
+                'Medical/Dental', 'Motorcycle', 'RV', 'Taxes', 'Vacation',
+                'Wedding Loans')
+pl$ListingCategory <- pl$ListingCategory..numeric %>% 
+  as.factor() %>% 
+  factor(labels = ctg)
+
+
+
+```
+
+
+###Loan Status:
+
+I created a new variable to hold a list of vector values which give the Loan Status in three ways - Open, Closed and Cancelled.
+
+
+```{r  echo=FALSE, warning=FALSE, message=FALSE,LoanStatus}
+pl$LoanStatusBucket<- factor(pl$LoanStatus)
+levels(pl$LoanStatusBucket)  <- list (
+                              Cancelled = c("Cancelled"),
+                              Closed = c("Chargedoff", "Completed", 
+                                         "Defaulted"),
+                              Open = c("Current", "FinalPaymentInProgress", 
+                                       "Past Due (1-15 days)", 
+                                       "Past Due (16-30 days)", 
+                                       "Past Due (31-60 days)",
+                                       "Past Due (61-90 days)",
+                                       "Past Due (91-120 days)",
+                                       "Past Due (>120 days)"))
+
+summary(pl$LoanStatusBucket)
+
+
+ggplot(aes(x = LoanStatusBucket, fill = LoanStatusBucket), 
+       data = pl) +
+    geom_bar(stat = "count") +
+    ggtitle("Loans Status  Histogram") +
+    xlab("Loan Status Buckets") + ylab("Count") 
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+###Income Range:
+
+Maximum number of people fall in the $25K-$50K and $50K-$75K ranges. Sadly, many people do not have their incomes listed and they fall in the "Not Displayed" range. It is interesting to note that such a vast number of people in $75K-100K and $100K+ also applied for loans. We would normally not expect to see such results. We would generally, expect such high counts in the $1-25K range.
+
+
+```{r   echo=FALSE, warning=FALSE, message=FALSE,IncomeRange}
+salary <- c("Not employed", "$0", "Not displayed", 
+                "$1-24,999", "$25,000-49,999", "$50,000-74,999",
+                "$75,000-99,999", "$100,000+")
+ggplot(aes(x = IncomeRange), data = pl) +
+    geom_bar(stat = "count", fill = I('#CC00FFFF')) +
+    scale_x_discrete(limits = salary) +
+    ggtitle("Income Range  Histogram") +
+    xlab("Salary - USD") + ylab("Count") +
+    coord_flip()
+```
+
+
+###Employment Status:
+
+Most of the borrowers are employed.
+
+
+```{r   echo=FALSE, warning=FALSE, message=FALSE,Emp_Status}
+
+ggplot(aes(x=EmploymentStatus, fill=EmploymentStatus), 
+       data = pl) +
+  geom_bar() +
+  scale_x_discrete()+
+  ggtitle('Employment Status Count') +
+  xlab('Employment Status')+
+  ylab('count') +
+  coord_flip() 
+  
+  
+```
+
+
+Summarizing the Loan Amount and arranging on descending order of Mean Loan Amount, it was found that DC topped the list.
+
+
+```{r  echo=FALSE, warning=FALSE, message=FALSE,Mean_loan }
+M<-pl %>%
+  group_by(BorrowerState) %>%
+  summarise(Mean_loan = mean(LoanOriginalAmount), 
+            Mean_monthly = mean(MonthlyLoanPayment))%>%
+  arrange(desc(Mean_loan))
+ head(M)
+# DC, NJ, MA, NH, AK, MD are the states with highest mean Loan and monthly Pay
+```
+
+
+
+Summarizing the Mean Monthly Loan payment also gave me the same order of states as when arranged by Loan Amount. This further establishes the fact that monthly loan payment has a direct, strong positive relation with Loan Payment and is a candidate for a linear model. 
+
+The mean Loan Amount and the mean MonthlyPayment is highest in DC. The number of loans is highest in CA; thus, large amount of money is involved there. So also, a large amount of money is involved in DC. This is what instigated me to compare the two states.
+
+
+```{r  echo=FALSE, warning=FALSE, message=FALSE, Mean_monthly }
+pl.Meanl<-pl %>%
+  group_by(BorrowerState) %>%
+  summarise( Mean_monthly = mean(MonthlyLoanPayment))%>%
+  arrange(desc(Mean_monthly))
+ head(pl.Meanl)
+
+```
+
+
+
+While the maximum mean Loan Amount is from DC the maximum number of loans come from CA, FL, NY & TX
+
+
+```{r   echo=FALSE, warning=FALSE, message=FALSE,Loan_State}
+
+
+  
+ggplot(data = pl, aes( x = BorrowerState, color = BorrowerState)) +
+  geom_bar() +
+  ggtitle("Borrower State Loan count ") +
+  xlab('Borrower state')+
+  ylab('Count') +
+  coord_flip()
+ # theme(axis.text.x=element_blank(), 
+        #axis.ticks.x = element_blank())
+
+```
+
+
+I created a dataframes for CA and DC for exploration. 
+
+```{r  echo=FALSE, warning=FALSE, message=FALSE, Merge}
+#plDC<- subset(pl, BorrowerState == "DC")
+#plCA <- subset(pl, BorrowerState =="CA")
+#total <- rbind(plDC, plCA)
+
+plDCCA <- subset(pl, BorrowerState == 'DC' | BorrowerState == 'CA')
+
+
+```
+
+
+# Univariate Analysis
+
+#### What is the structure of your dataset?
+
+It was found that data frame consists of 113937 observations of 81 variables. This is an enormous dataset. I decided to choose certain columns and work exclusively on them. My new dataframe consists of 21 variables. The variables chosen were: 
+
+Continuous Variables:
+
+EmploymentStatusDuration, CreditScoreRangeLower, CreditScoreRangeUpper, CurrentCreditLines,AvailableBankcardCredit, DebtToIncomeRatio, StatedMonthlyIncome, BorrowerAPR BorrowerRate, LoanOriginalAmount, MonthlyLoanPayment
+
+Discrete Variables:
+
+BorrowerState, Occupation, EmploymentStatus, IsBorrowerHomeowner, IncomeRange, IncomeVerifiable, Term ListingCategory..numeric, LoanStatus, LoanOriginationDate
+
+The Loan terms are 1, 3 and 5 years. Based on the histogram, the three year term is the most common.
+
+#### What is/are the main feature(s) of interest in your dataset?
+
+I am interested in finding the relationship between Income, Loan Status, Borrower Rate, DebtToIncomeRation & Monthly Loan Payment. There are definitely other variables which will further effect these. 
+
+#### What other features in the dataset do you think will help support your investigation into your feature(s) of interest?
+
+* The repayment of loans depends heavily on Income, Monthly Loan Payment, interest rate,  Employment status, Debt to Income ratio and Loan Status, Homeowner status. The amount of loan recieved in the first place also depends on these factors. I would like to  study the corealtion among these variabes and produce visualizations to see if there exists any relationship. These are the variables I will be exploring further.
+
+* I want to compare and contrast the states DC and CA. A large amount of money goes to CA because there are large number of borrwers. A large amount of money is also going out to DC since the mean Loan Original Amount is highest in DC. Hence, I would like to compare these two.
+
+* I also want to zoom in on borrowers with their Loan Status based on whether they are  Homeowners or not. I would like to know how the Borrower Rate is different for them.
+
+
+#### Did you create any new variables from existing variables in the dataset?
+
+
+The following new variables were created:
+
+Status: The Status being 'Defaulted, PastDue, Current or Paid and Cancelled
+
+LoanOriginationMonth: The Month the loan was taken
+
+LoanOriginationYear: The Year the loan was taken
+
+ListingCategory: The categories of Loans like 'Home Improvement', 'Wedding Loan' etc. This variable was numneric earlier. It was converted by using 'factor'.
+
+LoanStatusBucket: The loan status being - Cancelled, Open, Closed
+
+Due: Contains all the Past Due, Defaulted and Chargedoff values
+
+PayByFees: Log(StatedMonthlyIncome/MonthlyLoanPayment)
+
+FeesByPay: onthlyLoanPayment/StatedMonthlyIncome
+
+#### Of the features you investigated, were there any unusual distributions? Did you perform any operations on the data to tidy, adjust, or change the form of the data? If so, why did you do this?
+
+The two numberic variables 'Term' and 'Listing category' were  set to factors to make them discrete when plotted. I did not tidy or adjust the data apart from creating a few variables. I haven't found anything unusual so far. The people with income range from $25K to $75K seem to take maximum loans. Monthly Loan payment is also highest for the same group. Maximum number of Open loans were from mid 2012 to mid 2014.
+Majority of the loans are debt consolidation category. The other significant ones are home improvement and business loans.
+
+I arranged the data by descending order of Loan Amount and grouped them by Borrower State. I noticed that DC ranked highest in Mean Loan Amount. Also, CA has the highest number of loans taken. I was curious to find any relationship, if exists, between a state with highest number of loans to a state with highest mean loan amount taken. I will study this in Multivariate section.
+
+
+
+
+# Bivariate Plots Section:
+
+
+I start the Bivariate Analysis with plotting Loan Amount against Monthly Loan Payment. A linear pattern with 3 lines is noticed.I added jitter and transperancy to the plot. I also removed the outliers. It was seen that there is a strong corelation between the two. The corelation test produced a very high positive score of 0.93.
+Next, I took a subset of the data where Loan Amount is less than or equal to $10k. In this case the correalation factor with Monthly Payment is a strong positve 0.88.
+
+
+
+```{r   echo=FALSE, warning=FALSE, message=FALSE,LoanOriginalAmount_MonthlyPay}
+
+#ggplot(aes(x=LoanOriginalAmount,y=MonthlyLoanPayment), data=pl) +
+  #geom_point() +
+  #ggtitle("LoanOriginalAmount vs. MonthlyLoanPayment")
+#Scatter plot with jitter and transperancy
+ggplot(aes(x = LoanOriginalAmount, y = MonthlyLoanPayment), 
+       data = subset(pl, !is.na(LoanOriginalAmount))) +
+  geom_jitter(alpha = 1/4, 
+              position = position_jitter(h=0), color = 'orange') +
+  #geom_line(stat = 'summary' , fun.y = mean, color = 'blue') +
+  geom_smooth(method = "lm", color = 'red')+
+  coord_cartesian(xlim = c(0,25000), ylim = c(0,1500))+
+  ggtitle("LoanAmount vs Monthly Payment") +
+  xlab("Loan Amount - USD") + ylab("Monthly Payment - USD")
+
+# cor 0.9319837
+cor.test(pl$LoanOriginalAmount, pl$MonthlyLoanPayment, method = 'pearson')
+# cor = 0.88
+with( subset(pl, LoanOriginalAmount <= 10000) , cor.test(LoanOriginalAmount, MonthlyLoanPayment))
+
+```
+
+
+Next, I plotted Credit Score (lower) and Monthly Payment. I noticed a very thick plot in the 500 to 800 range. After zooming in and adding transperancy the corelation test was run. The corealtion was weak and positive.
+
+
+```{r   echo=FALSE, warning=FALSE, message=FALSE,CreditScore_MonthlyPay}
+
+
+ggplot(aes(x = CreditScoreRangeLower, y = MonthlyLoanPayment), 
+       data = subset(pl, !is.na(CreditScoreRangeLower))) +
+  geom_jitter(alpha = 1/2, color = 'red') +
+  xlim(400,800)+
+  ylim(0,1500) +
+  # coord_cartesian(xlim = c(400,1000), ylim = c(0,1500)) +
+  #xlim(0, quantile(pl$CreditScoreRangeLower, 0.95, na.rm = TRUE)) +
+  #ylim(0, quantile(pl$MonthlyLoanPayment, 0.95,na.rm = TRUE)) +
+  geom_smooth(method = 'lm', color = 'blue') +
+  ggtitle("Credit Score vs Monthly Payment") +
+  xlab("Credit Score") + ylab("Monthly Payment - USD")
+
+
+# cor = 0.29
+cor.test(pl$CreditScoreRangeLower, pl$MonthlyLoanPayment, method = 'pearson')
+
+```
+
+
+
+There is a negative corelation between the Credit Score vs Borrower Rate and is weak. 
+
+```{r   echo=FALSE, warning=FALSE, message=FALSE,CreditScore_BorrowerRate}
+ggplot(aes(x = CreditScoreRangeLower, y = BorrowerRate), 
+       data = subset(pl, !is.na(CreditScoreRangeLower))) +
+  geom_jitter(alpha = 1/4, color = 'red', position = position_jitter(h=0)) +
+  xlim(400,800)+
+  #scale_x_continuous(breaks = seq(400, 900, 50)) +
+  geom_smooth(method = 'lm', color = 'blue') +
+  ggtitle("Credit Score vs Borrower Rate") +
+  xlab("Credit Score") + ylab("Borrower Rate")
+
+  
+  
+
+# cor = - 0.46
+cor.test(pl$CreditScoreRangeLower, pl$BorrowerRate, method = 'pearson')
+```
+
+
+There is a negative relationship between Loan Amount and rate offered. The number and range of rates is decreasing as the Loan Amount increases. It is a weak corelation.
+
+```{r   echo=FALSE, warning=FALSE, message=FALSE,LoanAmt_BorrowerRate}
+ggplot( aes(x = LoanOriginalAmount, y = BorrowerRate), 
+        data = subset(pl, !is.na(LoanOriginalAmount))) + 
+  geom_point(alpha = 1/4, color = I('#099DD9'), 
+             position = position_jitter(h = 0)) + 
+  geom_smooth(method = 'lm', color = 'blue') +
+  ylim(0, 0.4) +
+  ggtitle('Loan Amount vs Borrower Rate') +
+  xlab("Loan Amount - USD") + ylab("Borrower Rate")
+
+
+#cor test = -0.32
+cor.test(pl$LoanOriginalAmount, pl$BorrowerRate, method = 'pearson')
+```
+
+
+I used the 2 new variables FeesByPay and PayByFees in scatter plots to see how they are connected to DebtToIncoemRatio.
+ There is initially a dip and then a rise in the line. 
+ 
+```{r echo=FALSE, CreditScore_BorrowerRate1, message=FALSE, warning=FALSE}
+ggplot(aes(x=DebtToIncomeRatio,y=FeesByPay), data= pl) +
+  geom_jitter(alpha = 1/4) +
+  geom_smooth()+
+  ggtitle("DebtToIncomeRatio vs. MonthlyLoanPayment/StatedIncome") +
+  xlab("Debt To Income Ratio") + ylab("FeesByPay")
+
+```
+
+I have not been able to get much out of these variables by plotting it agains Debt To Income Ratio.
+
+```{r echo=FALSE, DebtToIncome_PayByFees, message=FALSE, warning=FALSE}
+ggplot(aes(x = PayByFees, y = DebtToIncomeRatio), data=pl) +
+  geom_jitter(alpha = 1/4) +
+ 
+  ggtitle("PayBYFees vs. DebtToIncomeRatio") +
+   xlab("PayByFees") + ylab("Debt To Income Ratio")
+ 
+```
+
+The debt to Income ratio increases and later decreases as the FeesByPay ratio increases. I could not understand this pattern.
+
+```{r echo=FALSE, DebtToIncome_FeesByPay, message=FALSE, warning=FALSE}
+ggplot(aes(x = FeesByPay, y = DebtToIncomeRatio), data=pl) +
+  geom_jitter(alpha = 1/4) +
+  geom_smooth()+
+  xlim(0,500) +
+  ggtitle("FeesByPay vs. DebtToIncomeRatio") +
+  xlab("FeesByPay") + ylab("Debt To Income Ratio")
+
+
+```
+
+
+It was noticed that many fell in the "Debt Consolidation" category. This is not a very clear cut category as it could mean any of the other loans. The next high values were found in Home Improvement and Business Loan.
+
+```{r echo=FALSE, warning=FALSE, message=FALSE,ListingCategoryHist}
+ggplot(aes(x = ListingCategory, fill = ListingCategory), data = pl) +
+    geom_bar( stat = "count") +
+    ggtitle("Loans per Listing Category Histogram") +
+    xlab("Listing Category") + ylab("Count") +
+    theme(axis.text.x=element_blank(), axis.ticks.x = element_blank()) + 
+    coord_flip()
+```
+
+
+
+Most of the loans are 'Current' followed by those 'Completed'. This makes sense, since most loans are three year term; they peaked in 2013. So, they become past due only in 2016.(the data of which we don't have).
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, LoanYear_LoanStatus}
+ 
+
+ly1<-
+ggplot(aes(x=LoanOriginationYear, color=LoanStatus), data = pl) +
+  geom_freqpoly()
+
+ly2<-
+ggplot(aes(x=LoanOriginationYear, fill=LoanStatus), data = pl) +
+  geom_area(stat = "bin", position = "stack")  
+
+grid.arrange(ly1,ly2, ncol =1)
+
+```
+
+
+
+The following plot is Monthly Payment filled by Loan Status. I see that very few are past due. Many are current loans.
+
+```{r echo=FALSE, warning=FALSE, message=FALSE,MonthlyLoanPayment_LoanStatusFill}
+ggplot(aes(x=MonthlyLoanPayment, fill=LoanStatus), 
+       data =subset(pl, !is.na(MonthlyLoanPayment)))  +
+  geom_histogram(bins = 50) +
+  xlim(0,1500) +
+  ggtitle("Monthly Loan Payment Histogram with Loan Status") +
+  xlab("Monthly Loan Payment USD") + ylab("Count")
+
+```
+
+
+Those that have 'Completed' Loan status have greater incomes than others. I facet_wrapped it with IsBorrowerHomeOwner. People with homes seem to have more 'Completed' status than anyone else. Also, the current loans is high in Home owners.
+
+
+```{r echo=FALSE, Income_LoanStatus, message=FALSE, warning=FALSE}
+
+
+ggplot(aes(x=StatedMonthlyIncome,y=LoanStatus), 
+       data=subset(pl,StatedMonthlyIncome<50000) ) +
+  geom_jitter(color = 'purple', alpha = 1/4) +
+  #geom_line(stat = 'summary')+
+  facet_wrap(~IsBorrowerHomeowner) +
+  ggtitle("Income vs. LoanStatus") +
+  xlab("Income") + ylab("Loan Status")
+
+```
+
+Also, the Debt To Income Ratio for those with 'Completed' status is less which is obvious.
+
+
+```{r echo=FALSE, DebtToIncome_LoanStatus, message=FALSE, warning=FALSE}
+ggplot(aes(x=DebtToIncomeRatio,y=LoanStatus), 
+       data= subset(pl, !is.na(DebtToIncomeRatio)) ) +
+  geom_jitter(color = 'pink', alpha = 1/4) +
+  facet_wrap(~IsBorrowerHomeowner) +
+  ggtitle("DebtToIncomeRatio vs. LoanStatus") +
+  xlab("DebtTo Income Ratio") + ylab("Loan Status")
+```
+
+
+Those with high incomes, as expected, have lower Debt to income ratio.
+
+
+```{r echo=FALSE, Income_Debt, message=FALSE, warning=FALSE}
+ggplot(aes(x=StatedMonthlyIncome,y=DebtToIncomeRatio), 
+       data= subset(pl, !is.na(StatedMonthlyIncome) ) ) +
+  geom_jitter(color = 'yellow', alpha = 1/4) +
+  geom_smooth()+
+  coord_cartesian(xlim = c(0,50000), ylim = c(0,10.0) ) +
+  ggtitle(" Debt To Income Ratio vs Income ") +
+  xlab("Income - USD") + ylab("DebtToIncomeRatio")
+```
+
+
+There is a very weak positive corelation between Stated Monthly Income and Monthly pay. This means that even when people are earning more, they prefer to keep the monthly installments low.
+
+
+```{r echo=FALSE, Income_MonthlyPay, message=FALSE, warning=FALSE}
+ggplot(aes(x=StatedMonthlyIncome,y=MonthlyLoanPayment),         
+       data=subset(pl,StatedMonthlyIncome<50000) ) +
+  geom_jitter(color = 'cyan', alpha = 1/4) +
+  geom_smooth() +
+  ggtitle("Income vs. Monthly Payment") +
+  xlab("Income - USD") + ylab("Monthly Payment - USD")
+
+
+#cor = + .19
+cor.test(pl$StatedMonthlyIncome, pl$MonthlyLoanPayment)
+ 
+```
+
+
+For incomes less than 50000 there is a moderately positive linear corealtion between Income and Loan Amount
+
+
+```{r echo=FALSE, Income_Loan, message=FALSE, warning=FALSE}
+ggplot(aes(x=StatedMonthlyIncome,y=LoanOriginalAmount), 
+       data=subset(pl,StatedMonthlyIncome<50000 & 
+                     StatedMonthlyIncome>10 ) ) +
+  scale_x_log10() +
+  ylim(0,40000) +
+  geom_jitter(color = 'red', alpha = 1/4) +
+  geom_smooth(method = 'lm', color = 'blue') +
+  ggtitle("Income vs. Loan Amount") +
+  xlab("Income - USD") + ylab("Loan Amount - USD")
+
+
+f <- lm(LoanOriginalAmount ~ StatedMonthlyIncome, 
+        data = subset(pl,StatedMonthlyIncome<50000 & 
+                        StatedMonthlyIncome>10 ))
+summary(f)
+sal<- subset(pl, StatedMonthlyIncome<50000 & StatedMonthlyIncome>10 )
+#cor.test = 0.42
+cor.test(log(sal$StatedMonthlyIncome), sal$LoanOriginalAmount, 
+         method = 'pearson')
+```
+
+
+There is no linear relationship between Credit Score and Income.
+
+
+```{r echo=FALSE, CreditScore_Income, message=FALSE, warning=FALSE}
+ggplot(aes(x=CreditScoreRangeUpper,y=StatedMonthlyIncome), 
+       data=subset(pl, !is.na(CreditScoreRangeUpper)) ) +
+  geom_jitter(color = 'green', alpha = 1/4) +
+  geom_smooth() +
+  scale_y_log10() +
+   
+  ggtitle("Credit vs. Log_10(Income)") +
+  xlab("CreditScore") + ylab("Income - USD")
+
+NewMonthlyIncome <- subset(pl, StatedMonthlyIncome>50)
+f <- lm(log(NewMonthlyIncome$StatedMonthlyIncome) 
+        ~ NewMonthlyIncome$CreditScoreRangeUpper)
+summary(f)
+
+cor.test(NewMonthlyIncome$CreditScoreRangeUpper, 
+         log(NewMonthlyIncome$StatedMonthlyIncome), method = 'pearson')
+```
+
+Most of the borrowers are employed and the rate ranges betwenn 0.1 and 0.3 for the employed ones.
+```{r echo=FALSE, BR, message=FALSE, warning=FALSE}
+
+ggplot(aes(x=BorrowerRate, fill=EmploymentStatus), 
+       data = pl) +
+  geom_histogram(bins = 50) +
+  xlim(0,0.4) +
+  ggtitle("Borrower Rate - Employment Status") +
+  xlab('Borrower Rate')+
+  ylab('Count') 
+```
+
+
+
+Median Borrower Rate is inversely proportional to Income Range.
+
+
+```{r echo=FALSE, IncomeRange_BorrowerRate, message=FALSE, warning=FALSE}
+
+income_bins = c('Not displayed','$1-24,999','$25,000-49,999',
+                  '$50,000-74,999','$75,000-99,999','$100,000+')
+
+
+
+  ggplot(aes(x = IncomeRange, y = BorrowerRate), 
+         data = subset(pl, !is.na(IncomeRange))) + 
+  geom_boxplot() +
+  stat_summary(fun.y = mean,color = I("#CC3300"),geom = "point", size = 3) +
+  scale_x_discrete(limits = income_bins) +
+  ggtitle("Income vs. Borrower Rate") +
+  xlab("Income Range - USD") + ylab("Borrower Rate")  +
+  coord_flip()
+
+ 
+```
+
+
+As expected the median Loan Amount increases with the Income range. 
+
+
+```{r echo=FALSE, IncomeRange_Loan, message=FALSE, warning=FALSE}
+
+  ggplot( aes(x = IncomeRange, y = LoanOriginalAmount), 
+          data = subset(pl, !is.na(IncomeRange))) + 
+  geom_boxplot() +
+  stat_summary(fun.y = mean, color = I("#CC3300"), geom = "point", size = 3) +
+  scale_x_discrete(limits = income_bins) +
+  scale_y_continuous(breaks = seq(0, 35000, 5000)) +
+  ggtitle("Loan Amount vs Income Range")+
+  xlab("Income Range - USD") + ylab("Loan Amount - USD") +
+  coord_flip()
+
+
+```
+
+
+
+There is no linear relation between the current credit lines and Debt to Income Ratio. I was expecting an inverse relation.
+
+
+```{r echo=FALSE, CurrentCredit_DebtToIncomeRatio, message=FALSE, warning=FALSE}
+ggplot(data=pl, aes(x=CurrentCreditLines, y=DebtToIncomeRatio)) +
+  geom_point(alpha=1/10, size= 1.5, position='jitter', color = 'green') +
+  scale_y_log10() + 
+  geom_smooth() +
+  ggtitle("Current Credit vs Debt To Income Ratio") +
+  xlab("Current Credit") + ylab("Debt To Income Ratio") 
+ 
+```
+
+
+It is surprising to see that borrowers with high Debt to Income Ratio have the same borrower rates as others.
+
+
+```{r echo=FALSE, BRate_DebtToIncomeRatio, message=FALSE, warning=FALSE}
+ggplot(aes(x = BorrowerRate, y = DebtToIncomeRatio), data = pl) +
+  geom_point(alpha = 1/4, size = 1.5, color = 'red') +
+  geom_smooth()+
+  scale_y_log10() +
+ # scale_x_continuous(limits = c(0, 0.4)) +
+  ggtitle("Borrower Rate vs Debt To Income Ratio") +
+  xlab("Borrower Rate") + ylab("Debt To Income Ratio") 
+ 
+
+```
+
+
+The borrower rate is lower for a home owner.
+
+```{r echo=FALSE, Home_Brate, message=FALSE, warning=FALSE}
+ggplot(aes(x = IsBorrowerHomeowner, y =BorrowerRate),
+       data = subset(pl,BorrowerRate<0.39 & !is.na(DebtToIncomeRatio) )) +
+  geom_boxplot() +
+  ggtitle('BorrowerRate when Borrower is Home Owner') +
+  xlab("Is Borrower Home Owner") + ylab("Borrower Rate") 
+```
+
+
+By plotting a LoanOriginationYear histogram, it was seen that maximum of the Due loans were found in 2013 and 2014. Also, most of these were 3-year term loans. These "Due" values were found to peak at Loan Amounts of $6000, $11,000 and $16000. By introducing limits and breaks, it was found that the loan amount peaked at - $1000, $2000, $4000, $5000,$10000 & $15000.
+
+
+
+```{r echo=FALSE, OpenLoanStatus, message=FALSE, warning=FALSE}
+
+os1<-
+ggplot(aes(x = LoanOriginationYear, fill = factor(Due)), 
+       data = subset(pl, !is.na(LoanOriginationYear))) +
+  geom_histogram(bins = 50) +
+  ggtitle("Yearly Open Loan Status") +
+  xlab("Year") + ylab("Count") 
+
+os2<-
+ggplot(aes(x = Term, fill = factor(Due)), 
+       data = subset(pl, !is.na(Term))) +
+  geom_histogram( stat = "count", bins = 50) +
+  scale_x_discrete(labels="") +
+  ggtitle("Monthly Open Loans Status ") +
+  xlab("Term(Months)") + ylab("Count")
+
+os3<-
+ggplot(aes(x = LoanOriginalAmount, fill = factor(Due)), 
+       data = subset(pl, !is.na(LoanOriginalAmount)) ) +
+  geom_histogram(bins = 50) +
+  ggtitle("Open Loans Status/Due") +
+  xlab("Loan Amount(USD)") + ylab("Count")
+
+os4<-
+ggplot(aes(x = LoanOriginalAmount, fill = factor(Due)), 
+       data = subset(pl, !is.na(LoanOriginalAmount))) +
+  geom_histogram(bins = 50) +
+  scale_x_sqrt() +
+  ggtitle("Open Loans Status (Sqrt)") +
+  xlab("Loan Amount(USD) (sqrt)") + ylab("Count")
+
+os5<-
+ggplot(aes(x = LoanOriginalAmount, fill =  factor(Due)), 
+       data = subset(pl, !is.na(LoanOriginalAmount))) +
+  geom_histogram( binwidth = 500) +
+  #scale_x_sqrt() +
+  ggtitle("Open Loans Status/Due") +
+  xlab("Loan Amount(USD) Increased binwidth") + ylab("Count")
+
+
+grid.arrange(os1,os2,os3,os4,os5, ncol = 2 )
+```
+
+
+
+
+# Bivariate Analysis
+
+
+#### Talk about some of the relationships you observed in this part of the investigation. How did the feature(s) of interest vary with other features in the dataset?
+
+
+There is a weak positive corealtion between Credit Score and MonthlyLoanPayment. There is a negative corelation between the Credit Score and Borrower Rate and is weak. It cannot be said if the Credit Score really affects the Borrower Rate. I guess the weak linear fit in the graph is due to some influencer outlier points. I was expecting a strong inverse relation between the two. 
+
+There is a non lienar relationship between Loan Amount and rate offered. The number and range of rates is decreasing as the Loan Amount increases.
+
+I also noticed that those that have completed Loan status have higher incomes than others. This again is a very obvious thing. What is surprising is that people with homes have the highest ‘Completed’ loan status. I am assuming they don’t have home mortgages to pay!!!
+
+The 'Current' loan Status also is high for Homeowners. This is probably to pay for the home.
+
+There is a very weak positive corelation between 'Stated Monthly Income' and 'Monthly Loan Payment'. This means that even when people are earning more, they prefer to keep the monthly installments low. I expected that people with higher incomes would pay off their loans  by paying more amount monthly and get done.
+
+For incomes less than $50000 there is a moderately positive linear corealtion between Income and Loan Amount.
+
+The median Borrower rate decresses with increase in income.
+Median loan amount increases with income
+
+
+#### Did you observe any interesting relationships between the other features (not the main feature(s) of interest)?
+
+
+I found that the Borrower Rate is lower for a HomeOwner. At the same time, Borrower Rate does not seem to be related to the DebtTo Income ratio, since theose with high ratio also have the same BorrowerRate.
+I was expecting an inverse relation between Current Credit lines and Debt to Income ratio but the plot showed that there is absolutely no relation.
+Most people with 'Completed' loan status are homeowners. I think they have payed their mortgages fully or have been owning the house for a very long time.
+Those with 'Current' loan status are also homeowners. This is understandable as they probably took loan to pay off their mortgage or they took a loan because a heavy amount is going towards mortgage and they need money for other things. 
+The next thing I found was that in the highest income range people took loans for "Household expenses", cosmetic procedures and boats.
+
+#### What was the strongest relationship you found?
+
+
+The strongest relationship was between Loan Original Amount and Monthly loan payment. The corelation test produced a very high positive score of 0.93.
+Next, I took a subset of the data where Loan Amount is less than or equal to $10k. In this case the correalation factor with Monthly Payment is a positve 0.88.
+
+
+
+
+# Multivariate Plots Section
+
+
+
+
+$10k, $15K, $ 20K and $ 25K loans in a three year term are very common.
+
+```{r echo =FALSE, Multivariate_Plots , message=FALSE, warning=FALSE}
+
+
+ggplot(aes(x = LoanOriginationYear, y = LoanOriginalAmount, 
+           color = Term), data = pl) +
+  geom_point(alpha = 1/4, position = 'jitter') +
+  ggtitle('Amount Borrowed Over Time') +
+  xlab('Year') +
+  ylab('Amount Borrowed (USD)')
+```
+
+
+I do not see much difference in plots of DebtToIncomeRatio vs StatedMonthlyIncome colored by Loan Status and facet-wrapped by Homeowner variable. Whether the borrower is a homeowner or not, the distribution is almost same. This made me wonder howcome the home loan is not causing any change.
+
+
+```{r echo =FALSE, M1, message=FALSE, warning=FALSE}
+ggplot(aes(x=StatedMonthlyIncome, y=DebtToIncomeRatio, 
+           color = LoanStatus), data = pl) +
+  geom_point( position='jitter' ) +
+  geom_smooth()+
+  scale_x_log10() +
+  facet_wrap(~IsBorrowerHomeowner) +
+  ggtitle('Income vs Debt To Income Ratio Non Home Owner & Home Owner ') +
+  xlab('Income') +
+  ylab('Debt To Income Ratio')
+```
+
+
+Full time employed people get maximum loan amount. 
+
+
+```{r echo =FALSE, M2, message=FALSE, warning=FALSE}
+ggplot(aes(x=EmploymentStatus,y=LoanOriginalAmount, 
+           color=EmploymentStatus), 
+       data=subset(pl, !is.na(pl$EmploymentStatus))) + 
+  geom_boxplot() +
+  scale_x_discrete(labels = "" ) +
+  ylim(0,10000) +
+  ggtitle('Employment Status  vs Loan Amount') +
+  xlab('Employment Status') +
+  ylab('Loan Amount - USD') +
+  theme(axis.text.x=element_blank(), axis.ticks.x = element_blank())
+
+```
+
+The loan amounts are large as the term increases.
+
+```{r echo =FALSE, M3, message=FALSE, warning=FALSE}
+ggplot(data=pl, aes(x=Term,y=LoanOriginalAmount, color = Term))+ 
+  geom_boxplot(aes(fill = Term)) +
+  scale_y_log10() +
+  ggtitle('Term  vs Loan Amount') +
+  xlab('Term - Months') +
+  ylab('Loan Amount - USD')
+  
+```
+
+Borrower Rate is maximum for the 3 year term.
+
+```{r echo =FALSE, M4, message=FALSE, warning=FALSE}
+ggplot(data=pl, aes(x=Term,y=BorrowerRate, color = Term))+ 
+  geom_boxplot() +
+  ggtitle('Term  vs Borrower Rate') +
+  xlab('Term - Months') +
+  ylab('Borrower Rate')
+```
+
+The credit score is high for those with one year term.
+
+```{r echo =FALSE, M5, message=FALSE, warning=FALSE}
+ggplot(data=pl, aes(x=Term,y=CreditScoreRangeLower, color = Term))+ 
+  geom_boxplot() +
+  ggtitle('Term  vs Credit Score') +
+  ylim(500,800) +
+  xlab('Term - Months') +
+  ylab('Credit Score')
+```
+
+
+The Loan amounts are highest for green loans, baby & adoption and business. The loan amount is lowest for students.
+
+
+```{r echo =FALSE, M6, message=FALSE, warning=FALSE}
+ggplot( aes(x =ListingCategory, y = LoanOriginalAmount,
+            color = ListingCategory), data = pl) +
+  geom_boxplot() +
+  ylim(0,12000) +
+  ggtitle('Listing Category  vs Loan Amount') +
+  xlab('Listing Category') +
+  ylab('Loan Amount') +
+  theme(axis.text.x=element_blank(), axis.ticks.x = element_blank())
+
+```
+
+Baby Adoption, cosmetic procedure, green loans Household expenses and student loans are the loans for which the Borrower Rate is high.
+So, for the students the loan amount is the lowest and the borrower rate is the highest. 
+
+```{r echo =FALSE, M7, message=FALSE, warning=FALSE}
+ggplot(aes(x = ListingCategory,  y = BorrowerRate, 
+           color = ListingCategory), data = pl) +
+  ylim(0,0.3) +
+  geom_boxplot() +
+  ggtitle('Listing Category  vs Borrower Rate') +
+  xlab('Listing Category') +
+  ylab('Borrower Rate')  +
+  theme(axis.text.x=element_blank(), axis.ticks.x = element_blank())
+
+```
+
+
+Business Loans have been defaulted quite a bit.
+
+
+```{r echo =FALSE, M8, message=FALSE, warning=FALSE}
+
+ggplot(aes(x= ListingCategory, y = LoanOriginalAmount, 
+           fill = Status), data = arrange(pl, Status)) +
+  geom_bar(stat = "identity") +
+  xlab("Listing Category ") +
+  ylab("Loan Amount - USD") +
+  ggtitle("Loan Amount to Listing Category") +
+  coord_flip()
+ 
+```
+
+
+Maximum defaulters are in 3-year term. Seems right, since maximum number of laons is also in 3 year term.
+
+
+```{r  echo =FALSE, M9, message=FALSE, warning=FALSE}
+ggplot(aes(x= Term, y = LoanOriginalAmount, 
+           fill = Status), data = arrange(pl, Status)) +
+  geom_bar(stat = "identity") +
+  xlab("Term - Months") +
+  ylab("Loan Amount - USD") +
+  ggtitle("Loan Amount per Term by Status")
+```
+
+People employed Fulltime have defaulted quite a bit. This is surprising because the Borrower rate is low for full time employees. They are kind of given privelege.
+
+```{r echo =FALSE, M10, message=FALSE, warning=FALSE}
+ggplot(aes(x= EmploymentStatus, y = LoanOriginalAmount, 
+           fill = Status), data = arrange(pl, Status)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Loan Amount based on Employment Status") +
+  coord_flip() +
+  xlab("Employment Status") +
+  ylab("Loan Amount - USD")
+
+
+```
+
+
+Nothing conclusive can be said about the loan status of a home owner vs a non home owner wrt to Loan Amount.
+
+
+```{r echo =FALSE, M11, message=FALSE, warning=FALSE}
+ggplot(aes(x= IsBorrowerHomeowner, y = LoanOriginalAmount, 
+           fill = Status), data = arrange(pl, Status)) +
+  geom_bar(stat = "identity") +
+  xlab("IsBorrowerHomeOwner ") +
+  ylab("Loan Amount - USD") +
+  ggtitle("Loan Amount based on Homeowning Status")
+```
+
+Loan Amount vs Credit Score produces a normal distribution.
+
+```{r echo =FALSE, M12, message=FALSE, warning=FALSE}
+ggplot(aes(x= CreditScoreRangeLower, y = LoanOriginalAmount, 
+           fill = Status), data = arrange(pl, Status)) +
+  geom_bar(stat = "identity") +
+  xlim(450,850) +
+  xlab("Credit Score ") +
+  ylab("Loan Amount - USD") +
+  ggtitle("Loan Amount vs Credit Score")
+```
+
+
+There is a weak positive corelation between Credit score and Loan amount
+
+```{r echo =FALSE, M13, message=FALSE, warning=FALSE}
+ggplot(aes(x= CreditScoreRangeLower, y = LoanOriginalAmount, 
+           color = Status), data = arrange(pl, Status)) +
+  geom_jitter(alpha = 1/4, color = 'wheat') +
+  geom_smooth(method = 'lm') +
+  ylim(0,30000) +
+  xlim(450,850) +
+  xlab("Credit Score ") +
+  ylab("Loan Amount - USD") +
+  ggtitle("Loan Amount based on Credit Score")
+
+
+#cor = 0.34
+cor.test(pl$CreditScoreRangeLower, pl$LoanOriginalAmount)
+```
+
+```{r echo =FALSE, M14, message=FALSE, warning=FALSE}
+ggplot(aes(x= IncomeRange, y = LoanOriginalAmount, 
+           fill = Status), data = arrange(pl, Status)) +
+  geom_bar(stat = "identity") +
+  xlab("Income Range - USD") +
+  ylab("Loan Amount - USD") +
+  ggtitle("Loan Amount based on Income Range") +
+  coord_flip()
+
+```
+
+
+####The following is a comparison between the two states CA and DC 
+
+As loan amount increases, the Debt to Income ratio of DC is slightly less than CA.
+
+```{r echo =FALSE, M16, message=FALSE, warning=FALSE}
+ggplot(aes(x = LoanOriginalAmount, y = DebtToIncomeRatio, 
+           color = BorrowerState), data = plDCCA) +
+  geom_jitter(alpha = 1/4) + 
+  scale_y_log10() +
+  geom_smooth() +
+  xlab("Loan Amount - USD") +
+  ylab("Debt To Income Ratio") +
+  ggtitle("Scatter of Loan amount vs Debt To Income Ratio")
+```
+
+It is noticed that DC loans are equally distributed in the three terms and Debt to Income ratio is almost same accross terms. In CA however, the maximum number of loans are in 3 year term and there are many levels in Debt to Income Ratio.
+
+```{r echo =FALSE, M17, message=FALSE, warning=FALSE}
+ggplot(aes(x = Term, y = DebtToIncomeRatio, 
+           color = BorrowerState), data = plDCCA) +
+  geom_jitter(alpha = 1/4) + scale_y_log10() +
+  xlab("Term - Months") +
+  ylab("Debt To Income Ratio") +
+  ggtitle("Debt To Income Ratio based on Term")
+```
+
+The median "Past Due" status is higher in DC.
+
+```{r echo =FALSE, M18, message=FALSE, warning=FALSE}
+ggplot(aes(x = BorrowerState, y = DebtToIncomeRatio, 
+           color = Status ), data = plDCCA) +
+  geom_boxplot() +
+  ylim(0,0.5) +
+  xlab(" Borrower State") +
+  ylab("Debt To Income Ratio") +
+  ggtitle("Debt To Income Ratio based on Borrower State")
+```
+
+Those with 'Past Due' in DC have taken bigger loans than those in CA. Even the defaulted ones in DC have borrowed larger amounts than CA.
+
+```{r echo =FALSE, M19, message=FALSE, warning=FALSE}
+ggplot(aes(x = BorrowerState, y = LoanOriginalAmount, 
+           color = Status ), data = plDCCA) +
+  ylim(0,15000) +
+  geom_boxplot() +
+  xlab(" Borrower State") +
+  ylab("Loan Amount - USD") +
+  ggtitle("Loan Amount based on Borrower State")
+```
+
+In general, Home owners have taken bigger Loans than non home owners. DC leads CA in the Loan amount among both Home owners and non owners.
+
+```{r echo =FALSE, M20, message=FALSE, warning=FALSE}
+ggplot(aes(x = IsBorrowerHomeowner, y = LoanOriginalAmount, 
+           color = BorrowerState ), data = plDCCA) +
+  ylim(0,15000) +
+  geom_boxplot() +
+  xlab(" Home Owner Status") +
+  ylab("Loan Amount - USD") +
+  ggtitle("Loan Amount based on Home Owning Status")
+```
+
+
+The employment condition of DC seems to be good. None of the borrowers is unemployed. I wonder why they are not paying their Dues then! CA has quite a number of unemployed borrowers. The Debt To Income ratio is pretty much consistent for DC. CA has many outliers.
+
+```{r echo =FALSE, M21, message=FALSE, warning=FALSE}
+ggplot(aes(x = EmploymentStatus, y = DebtToIncomeRatio, 
+           color = BorrowerState ), data = plDCCA) +
+  ylim(0,0.5) +
+  geom_boxplot() +
+  coord_flip() +
+  xlab("Employment Status") +
+  ylab("Debt To Income Ratio") +
+  ggtitle("Debt To Income Ratio based on Employment Status")
+
+```
+
+The same information is now depicted in a histogram of DC and CA combined
+
+```{r echo =FALSE, M21a, message=FALSE, warning=FALSE}
+
+
+ggplot(aes(x = MonthlyLoanPayment, 
+           fill = EmploymentStatus ), data = plDCCA) +
+  xlim(0,1500) +
+  geom_histogram(binwidth = 100) +
+  facet_wrap(~BorrowerState) +
+  xlab(" Monthly Payment - USD") +
+  ylab("Debt To Income Ratio") +
+  ggtitle("Debt To Income Ratio vs Monthly Payment based on Employment Status")
+```
+
+This is a freqpoly of the monthly loan payment of both states DC and CA combined
+
+```{r echo =FALSE, M22, message=FALSE, warning=FALSE}
+
+
+ggplot(aes(x = MonthlyLoanPayment, 
+           color = EmploymentStatus ), data = plDCCA) +
+  geom_freqpoly(binwidth = 100) +
+  facet_wrap(~BorrowerState) +
+  xlab(" Monthly Payment - USD") +
+  ylab("Count") +
+  ggtitle("Monthly Payment Frequency based on Employment Status")
+```
+
+This graph presents queer curves which are tough for me to decipher.
+
+```{r echo =FALSE, M23, message=FALSE, warning=FALSE}
+ggplot(aes(x = StatedMonthlyIncome, y = MonthlyLoanPayment, 
+           color = BorrowerState ), data = plDCCA) +
+  geom_point(alpha = 1/2) +
+  scale_x_log10()+
+  geom_smooth() +
+  xlab(" Monthly Income - USD") +
+  ylab("Monthly Loan Payment - USD") +
+  ggtitle("Monthly Payment vs Monthly Income - CA & DC")
+```
+
+DC presents a fairly consistent pictue. Whether you own a home or not, you are pretty much the same in terms of Debt To Income Ratio. CA has many outliers but generally, the bulk of the data has less Debt to Income Ratio.
+
+```{r echo =FALSE, M24, message=FALSE, warning=FALSE}
+ggplot(aes(x = IsBorrowerHomeowner, y = DebtToIncomeRatio, 
+           color = BorrowerState ),data = plDCCA ) +
+  ylim(0,0.5) +
+  geom_boxplot() +
+  xlab("Homeowner Status") +
+  ylab("Debt To Income Ratio") +
+  ggtitle("Debt To Income Ratio based on Homeowner Status - CA & DC")
+```
+
+The monthly loan payment of employed people in DC is higher than those of CA
+
+```{r echo =FALSE, M25, message=FALSE, warning=FALSE}
+ggplot(aes(y = MonthlyLoanPayment, x = EmploymentStatus, 
+           fill = BorrowerState ), data = plDCCA ) +
+  ylim(0,500) +
+  ylab("Monthly Loan Payment - USD") +
+  xlab("Employment Status") +
+  geom_boxplot() +
+  coord_flip() +
+  ggtitle("Monthly Loan Payment based on Employment Status - CA & DC")
+```
+
+The Debt to Income Ratio is almost same accross all kinds of Employment Status in both DC and CA. This means there is no corealtion between the two.
+
+```{r echo =FALSE, M26, message=FALSE, warning=FALSE}
+ggplot(aes(y = DebtToIncomeRatio, x = EmploymentStatus, 
+           fill = BorrowerState ), data = plDCCA) +
+  ylim(0,0.4) +
+  geom_boxplot() +
+  coord_flip() +
+  ggtitle("Debt To Income Ratio based on Employment Status - CA & DC")
+  
+```
+
+With higher employment in DC, the past due status seems to be higher there.This is very unusual since emloyment rate is very high.
+
+```{r echo =FALSE, M27, message=FALSE, warning=FALSE}
+ggplot(aes(y = MonthlyLoanPayment, x = BorrowerState, 
+           fill = Status ), data = plDCCA) +
+  ylim(0,600) +
+  geom_boxplot() +
+  xlab("State") +
+  ylab("Monthly Loan Payment - USD") +
+  ggtitle("Monthly Loan Payment based on Borrower State - CA & DC")
+```
+
+BorrowerRate is high in CA and highest for unemployed people.
+
+```{r echo =FALSE, M28, message=FALSE, warning=FALSE}
+ggplot(aes(y = BorrowerRate, x = EmploymentStatus, 
+           fill = BorrowerState ), data = plDCCA) +
+  geom_boxplot() +
+  coord_flip() +
+  ylab("Borrower Rate") +
+  xlab("Employment Status ") +
+  ggtitle("Borrower Rate based on Employment Status - CA & DC")
+```
+
+
+I wanted to study how Borrower Rate is affected Employment Status. The borrower rate for CA is fluctuates more.
+
+```{r echo =FALSE, M29, message=FALSE, warning=FALSE}
+ggplot(aes(y = BorrowerRate, x = EmploymentStatus, 
+                           fill = BorrowerState ),data = plDCCA) +
+  geom_boxplot() + 
+  xlab("Employment Status ") +
+  ylab("Borrower Rate") +
+  ggtitle("Borrower Rate based on Employment Status - CA & DC") +
+  coord_flip() 
+  
+    
+```
+
+
+
+
+
+
+I have not been able to find a strong corealtion between Borrower Rate and any of the variables I researched on.
+
+```{r echo = FALSE, message=FALSE, warning=FALSE}
+
+
+#cortst = -.46
+cor.test(pl$BorrowerRate, pl$CreditScoreRangeLower)
+```
+
+```{r echo = FALSE, message=FALSE, warning=FALSE}
+#cortest = -.34
+cor.test(pl$BorrowerRate, pl$AvailableBankcardCredit)
+```
+
+
+```{r echo = FALSE, message=FALSE, warning=FALSE}
+#cor = -.32
+cor.test(pl$BorrowerRate, pl$LoanOriginalAmount)
+```
+
+
+
+I used facetwrap by loan status to plot a few graphs and filtered the data on the basis of Homeowner Status. I wanted to find out how the Homeowner status affects the borrower.
+
+The plots are similar for all the Non Home owners, meaning there seems to be no relation between Loan amount and Monthly Income across any Loan Status for Non Home Owners.
+
+```{r echo = FALSE, M30, message = FALSE, warning = FALSE}
+pl %>%  filter(IsBorrowerHomeowner == "False" ) %>% 
+  group_by(LoanOriginalAmount) %>% 
+  ggplot(aes(x = LoanOriginalAmount , y = StatedMonthlyIncome)) +
+  geom_point() +
+  geom_smooth()+
+  scale_y_log10()+
+  facet_wrap(~LoanStatus) +
+  xlab("Loan Amount - USD") +
+  ylab("Monthly Income - USD") +
+  ggtitle("Monthly Income vs Loan Amount- Not Home Owner")
+  
+```
+
+The plots are similar for all the Home owners, meaning there seems to be no relation betwwen Loan amount and Monthly Income across any Loan Status for Home Owners.
+
+```{r echo =FALSE, M31, message=FALSE, warning=FALSE}
+pl %>%  filter(IsBorrowerHomeowner == "True" ) %>% 
+  group_by(LoanOriginalAmount) %>% 
+  ggplot(aes(x = LoanOriginalAmount , y = StatedMonthlyIncome)) +
+  geom_point() +
+  geom_smooth()+
+  scale_y_log10()+
+  facet_wrap(~LoanStatus) +
+  xlab("Loan Amount - USD") +
+  ylab("Monthly Income") +
+  ggtitle("Monthly Income vs Loan Amount- Home Owner")
+```
+
+Across all Non Home owners, there is an inverse relation between DebtToIncome Ratio and Monthly Income.
+
+```{r echo =FALSE, M32, message=FALSE, warning=FALSE}
+pl %>%  filter(IsBorrowerHomeowner == "False" ) %>% 
+  group_by(LoanOriginalAmount) %>% 
+  ggplot(aes(x = DebtToIncomeRatio , y = StatedMonthlyIncome, 
+             color = 'pink')) +
+  geom_point() +
+  geom_smooth(color = 'blue')+
+  scale_y_log10()+
+  facet_wrap(~LoanStatus) +
+  xlab("Debt To Income Ratio") +
+  ylab("Monthly Income - USD") +
+  ggtitle("Monthly Income vs Debt To Income Ratio- Not Home Owner")
+```
+
+On the other hand the relation is not so pronounced in the case of Home Owners. This made me think that the home owners probably have payed off their mortgage because of which their Debts are considerably low.
+
+```{r echo =FALSE, M33, message=FALSE, warning=FALSE}
+pl %>%  filter(IsBorrowerHomeowner == "True" ) %>% 
+  group_by(LoanOriginalAmount) %>% 
+  ggplot(aes(x = DebtToIncomeRatio , y = StatedMonthlyIncome, 
+             color = 'pink')) +
+  geom_point() +
+  geom_smooth(color = 'blue')+
+  scale_y_log10()+
+  facet_wrap(~LoanStatus) +
+  xlab("Debt To Income Ratio") +
+  ylab("Monthly Income - USD") +
+  ggtitle("Monthly Income vs Debt To Income Ratio- Home Owner")
+```
+
+
+For both Home Owners and Non home owners, there seems to be no relation between Monthly Income and Borrower Rate. 
+
+```{r echo =FALSE, M34, message=FALSE, warning=FALSE}
+pl %>%  filter(IsBorrowerHomeowner == "False" ) %>% 
+  group_by(LoanOriginalAmount) %>% 
+  ggplot(aes(x = BorrowerRate , y = StatedMonthlyIncome)) +
+  geom_point() +
+  geom_smooth()+
+  scale_y_log10()+
+  facet_wrap(~LoanStatus) +
+  xlab("Borrower Rate") +
+  ylab("Monthly Income - USD") +
+  ggtitle("Monthly Income vs Borrower Rate - Not Home Owner")
+```
+
+```{r echo =FALSE, M35, message=FALSE, warning=FALSE}
+pl %>%  filter(IsBorrowerHomeowner == "True" ) %>% 
+  group_by(LoanOriginalAmount) %>% 
+  ggplot(aes(x = BorrowerRate , y = StatedMonthlyIncome)) +
+  geom_point() +
+  geom_smooth()+
+  scale_y_log10()+
+  facet_wrap(~LoanStatus) +
+  xlab("Borrower Rate") +
+  ylab("Monthly Income - USD") +
+  ggtitle("Monthly Income vs Borrower Rate - Home Owner")
+```
+
+
+###Visualizations giving the count of Loan Status for both home owners and non home owners. 
+
+```{r echo =FALSE, M36, message=FALSE, warning=FALSE}
+
+tile1 <- pl %>%  filter(IsBorrowerHomeowner == 'False' ) %>% 
+  count(IsBorrowerHomeowner, LoanStatus) %>% 
+  ggplot(aes(IsBorrowerHomeowner, LoanStatus, fill = n)) +
+  geom_tile() +
+  xlab("Not HomeOwner - US") +
+  ylab("Loan Status") + 
+  scale_fill_viridis(name="Count")
+  #labels = ("Count")
+  
+tile2<- pl %>%  filter(IsBorrowerHomeowner == 'True' ) %>% 
+  count(IsBorrowerHomeowner, LoanStatus) %>% 
+  ggplot(aes(IsBorrowerHomeowner, LoanStatus, fill = n)) +
+  geom_tile() +
+  xlab("HomeOwner - US") +
+  ylab("Loan Status") +
+  scale_fill_viridis(name="Count")
+  
+grid.arrange(tile1, tile2, ncol = 2)  
+  
+```
+
+
+
+
+The Loan Status in CA and DC is more or less the same whether one is a home owner or not.
+
+
+
+```{r echo =FALSE, M37, message=FALSE, warning=FALSE}
+tile3 <- plDCCA %>%  filter(IsBorrowerHomeowner == 'False' ) %>% 
+  count(IsBorrowerHomeowner, LoanStatus) %>% 
+  ggplot(aes(IsBorrowerHomeowner, LoanStatus, fill = n)) +
+  geom_tile() +
+  xlab(" Not HomeOwner - DC & CA") +
+  ylab("Loan Status") +
+  scale_fill_viridis(name="Count")
+  
+tile4 <- plDCCA %>%  filter(IsBorrowerHomeowner == 'True' ) %>% 
+  count(IsBorrowerHomeowner, LoanStatus) %>% 
+  ggplot(aes(IsBorrowerHomeowner, LoanStatus, fill = n)) +
+  geom_tile() +
+  xlab("HomeOwner - DC & CA") +
+  ylab("Loan Status") +
+  scale_fill_viridis(name="Count")
+
+grid.arrange(tile3, tile4, ncol = 2)   
+  
+```
+
+
+
+I did the same procedure on both states individually. In the CA plot there does not seem to be much change. It almost looks like the previous plots.
+
+```{r echo =FALSE, M38, message=FALSE, warning=FALSE}
+tile5 <- plDCCA %>%  filter(IsBorrowerHomeowner == 'False' & 
+                              BorrowerState == 'CA' ) %>% 
+  count(IsBorrowerHomeowner, LoanStatus) %>% 
+  ggplot(aes(IsBorrowerHomeowner, LoanStatus, fill = n)) +
+  geom_tile() +
+  xlab(" Not HomeOwner CA") +
+  ylab("Loan Status") +
+  scale_fill_viridis(name="Count")  
+  
+tile6 <- plDCCA %>%  filter(IsBorrowerHomeowner == 'True' &
+                              BorrowerState == 'CA' ) %>% 
+  count(IsBorrowerHomeowner, LoanStatus) %>% 
+  ggplot(aes(IsBorrowerHomeowner, LoanStatus, fill = n)) +
+  geom_tile() +
+  xlab("HomeOwner CA") +
+  ylab("Loan Status") +
+  scale_fill_viridis(name="Count")
+
+grid.arrange(tile5, tile6, ncol = 2)  
+```
+
+
+
+There seems to be  difference in output when I did the same for DC. More homeowners have current or completed status. So, owning a home has somehow affected the Loan Status.
+
+```{r echo =FALSE, M39, message=FALSE, warning=FALSE}
+
+tile7 <- plDCCA %>%  filter(IsBorrowerHomeowner == 'False' &
+                              BorrowerState == 'DC' ) %>% 
+  count(IsBorrowerHomeowner, LoanStatus) %>% 
+  ggplot(aes(IsBorrowerHomeowner, LoanStatus, fill = n)) +
+  geom_tile() +
+  xlab(" Not HomeOwner-DC") +
+  ylab("Loan Status") +
+  scale_fill_viridis(name="Count")
+  
+tile8 <- plDCCA %>%  filter(IsBorrowerHomeowner == 'True' & 
+                              BorrowerState == 'DC' ) %>% 
+  count(IsBorrowerHomeowner, LoanStatus) %>% 
+  ggplot(aes(IsBorrowerHomeowner, LoanStatus, fill = n)) +
+  geom_tile() +
+  xlab("HomeOwnerDC") +
+  ylab("Loan Status") +
+  scale_fill_viridis(name="Count")
+
+grid.arrange(tile7, tile8, ncol = 2)  
+
+```
+
+
+
+##Linear Modeling
+
+
+####1. Monthly Loan Payment & LoanOriginalAmount
+
+A very favorable r-squared value of 0.86 is obtained. The residuals vs. fitted plot shows the residuals around the zero line forming a thich horizontal band. This is a very desirable model showing a strong linear relation.
+
+```{r echo =FALSE, Model1, message=FALSE, warning=FALSE}
+
+#Plotting data
+plot(MonthlyLoanPayment~LoanOriginalAmount, data = pl) +
+  abline(col='red')
+
+#Simple linear regression. Fitting the model
+model1 <- lm(MonthlyLoanPayment~LoanOriginalAmount, data = pl) 
+#show results
+summary(model1)
+#confidence intervals for model parameters
+confint(model1, level = 0.95)
+#predicted values
+#fitted((model1))
+#residuals
+#residuals(model1)
+#anova table
+#anova(model1)
+#convariance matrix for model parameters
+#vcov(model1)
+#regression diagnostics
+#influence(model1)
+
+
+#diagnostic plots
+layout(matrix(c(1,2,3,4),2,2))
+plot(model1)
+abline(model1, col = "red")
+
+
+
+```
+
+####2. Borrower Rate and StatedMonthlyIncome
+
+```{r echo =FALSE, Model2, message=FALSE, warning=FALSE}
+# #Plotting data
+# #plot(BorrowerRate~StatedMonthlyIncome + DebtToIncomeRatio + CreditScoreRangeLower, data = pl)
+# 
+# #Simple linear regression. Fitting the model
+ model2 <- lm(BorrowerRate~StatedMonthlyIncome + 
+                DebtToIncomeRatio + CreditScoreRangeLower, data = pl) 
+# #show results
+summary(model2)
+# #confidence intervals for model parameters
+ confint(model2, level = 0.95)
+# #predicted values
+# fitted((model2))
+# #residuals
+# residuals(model2)
+# #anova table
+# anova(model2)
+# #convariance matrix for model parameters
+# vcov(model2)
+# #regression diagnostics
+# influence(model2)
+# 
+# 
+# #diagnostic plots
+layout(matrix(c(1,2,3,4),2,2))
+plot(model2)
+abline(model2, col = "red")
+
+```
+
+####3. BorrowerRate and EmploymentStatus
+
+```{r echo =FALSE, Model3, message=FALSE, warning=FALSE}
+# #tell R that Employment Status is categorical
+# str(pl$EmploymentStatus)
+# pl$EmploymentStatus <- factor(pl$EmploymentStatus)
+# #Simple linear regression. Fitting the model
+model3 <- lm(BorrowerRate~EmploymentStatus, data = pl) 
+# #show results
+summary(model3)
+# #confidence intervals for model parameters
+confint(model3, level = 0.95)
+# #predicted values
+# fitted((model3))
+# #residuals
+# residuals(model3)
+# #anova table
+# anova(model3)
+# #convariance matrix for model parameters
+# vcov(model3)
+# #regression diagnostics
+# influence(model3)
+# 
+# 
+# #diagnostic plots
+layout(matrix(c(1,2,3,4),2,2))
+plot(model3)
+abline(model3, col = "red")
+
+```
+
+####4. BorrowerRate and CreditScore
+
+```{r echo =FALSE, Model4, message=FALSE, warning=FALSE}
+model4 <- lm(BorrowerRate~CreditScoreRangeLower, data = pl)
+summary(model4)
+confint(model4, level = 0.95)
+#diagnostic plots
+layout(matrix(c(1,2,3,4),2,2))
+plot(model4)
+abline(model4, col = "red")
+```
+
+
+####BorrowerRate and Loan Amount
+
+```{r echo =FALSE, Model5, message=FALSE, warning=FALSE}
+model5 <- lm(BorrowerRate~LoanOriginalAmount, data = pl)
+summary(model5)
+confint(model5, level = 0.95)
+#diagnostic plots
+layout(matrix(c(1,2,3,4),2,2))
+plot(model5)
+abline(model5, col = "red")
+```
+
+```{r echo =FALSE,r_squared, message=FALSE, warning=FALSE}
+#0.86 r squared
+#summary(model1)$r.squared
+#0.24
+#summary(model2)$r.squared
+#.0086
+#summary(model3)$r.squared
+
+#predict(model1,plDC,interval = "predict")
+```
+
+
+# Multivariate Analysis
+
+
+#### Talk about some of the relationships you observed in this part of the investigation. Were there features that strengthened each other in terms of looking at your feature(s) of interest?
+
+
+There was not much difference in plots of DebtToIncomeRatio vs StatedMonthlyIncome colored by Loan Status and facet-wrapped by Homeowner variable. Whether the borrower is a homeowner or not, the distribution is almost same. 
+
+Full time employed people get maximum loan amount. The loan amounts are large as the term increases.
+
+Borrower Rate is maximum for the 3 year term. Baby Adoption, cosmetic procedure, green loans Household expenses and student loans are the loans for which the Borrower Rate is high.
+I have not been able to find a corealtion between Borrower Rate and any of the variables I researched on.
+
+The credit score is high for those with one year term. There is a weak positive corelation between Credit score and Loan amount
+
+Maximum defaulters are in 3-year term. Business Loans have been defaulted quite a bit. Fulltime employed people have defaulted more. This is surprising because the Borrower rate is low for full time employees. They are kind of given privelege.
+
+DC leads CA in the Loan amount among both Home owners and non owners. DC presents a fairly consistent pictue. Whether you own a home or not, you are pretty much the same in terms of Debt To Income Ratio. CA has many outliers but generally bulk of the data has less Debt to Income Ratio. Employment Status is also good in DC. BorrowerRate is high in CA and highest for unemployed people.
+
+The plots are similar for all the Non Home owners, meaning there seems to be no relation between Loan amount and Monthly Income across any Loan Status for Non Home Owners.
+
+
+#### Were there any interesting or surprising interactions between features?
+
+The loan amount is least for Student and the borrower rate is the highest. This is unfair!
+Across all Non Home owners, there is an inverse relation between DebtToIncome Ratio and Monthly Income. On the other hand, the relation is not so pronounced in the case of Home Owners. Maybe, home owners have payed off their mortgage because of which their Debts are considerably low. 
+For both Home Owners and non home owners, there seems to be no relation between Monthly Income and Borrower Rate.
+
+
+#### OPTIONAL: Did you create any models with your dataset? Discuss the strengths and limitations of your model.
+
+I created five models - 
+
+###Linear Regression:
+
+* 1.Monthly Loan Payment and Loan Amount
+I got an r-squared value of 0.86. This was really the first positive thing I saw in this whole exploration. The residual vs Fit plot is beautiful. There are values on either side of the zero line which is good. The residuals form a horizontal band around the zero line which implies that the variances of the error terms are equal. There are no big outliers.
+
+* 2.BorrowerRate and CreditScore
+Rsuared is 0.21. The residual vs Fit plot show a good horizontal group around the zero line. A group of outliers pulls down this line. Maybe dealing with outliers will produce a better outcome. This is one thing I would love to revisit in future.
+
+* 3.BorrowerRate and Loan Amount
+The rsquared is 0.10. The residual vs Fit plot shows a good strength around the zero line. I do not understand why the realtion is weak when it looks go good on the graph. :( Maybe, I am missing something. I will revisit these models, once I learn Linear Regression and Machine Learning and correct the mistakes that I possibly made.
+
+###Multiple Linear Regression 
+
+* 4.Borrower Rate and CreditScore, DebtToIncomeRatio and StatedMonthlyIncome
+I got a weak r-squared value of 0.24. Borrower Rate is totally eluding my grasp of this Loan data. The good thing is it is at least slightly corelated to Income, DebtToIncome and Credit Score.
+
+###Linear Regression with Categorical variable 
+
+* 5.Borrower Rate and Employment Status
+I could not perform a cor.test on the categorical variable Employment Status. So I decided to factor it so that I will be able to build a linear model. I came to know that Borrower Rate and Emplyoment Status cannot be fit in a model. The residuals form perpendicular bands with the zero line. I got a very less r-squared value of 0.0086. The Borrower Rate does not seem to be related to Employment Status at all. The plots glaringly present a non-linear model.
+------
+
+# Final Plots and Summary
+
+### Plot One: Loan Amount to Listing Category
+```{r echo=FALSE, Plot_One, message=FALSE, warning=FALSE}
+
+
+ggplot(aes(x= ListingCategory, y = LoanOriginalAmount, fill = Status), data = arrange(pl, Status)) +
+  geom_bar(stat = "identity") +
+  xlab("Listing Category ") +
+  ylab("Loan Amount") +
+  ggtitle("Loan Amount to Listing Category") +
+  coord_flip()
+
+
+```
+
+#### Description One
+
+This plot shows that 'Default' status is high in Boat, Auto, Business, Home Improvement and 'Household expenses' categories. This is surprising since most of these loans are taken by people with Employment. I had created a box plot of income range of borrowers vs the listing category. There, I wanted to find out what kind of loans the people with higher incomes are taking. It was noticed that in the highest income range people are taking loans for "Household expenses", cosmetic procedures and boats. The above plot shows that the Household Expenses, Boat etc have defaulters. That is wierd, since the borrowers are earning but not repaying the loan.
+
+What I felt is unfair is that Students get very less loan amount. This is offered at a very high Borrower rate.Baby Adoption, cosmetic procedure, green loans Household expenses and student loans are the loans for which the Borrower Rate is high. So, for the students loan,  the loan amount is the lowest and the borrower rate is the highest.
+
+I guess a more structured, progressive way should be introduced, where people with more basic, everyday needs are catered to. I am not against vacation loans and boat loans, but it is not reasonable to not provide money to a person willing to study. The borrower rate also has to be reasonable.
+
+
+
+
+### Plot Two: Income Range
+```{r echo=FALSE, Plot_Two, message=FALSE, warning=FALSE}
+i1<-
+ggplot(aes(x= IncomeRange, y = LoanOriginalAmount, fill = Status), 
+       data = arrange(pl, Status)) +
+  geom_bar(stat = "identity") +
+  xlab("Income Range - USD") +
+  ylab("Loan Amount - USD") +
+  ggtitle("Loan Amount based on Income Range") +
+  coord_flip()
+
+i2<-
+ggplot(aes(x=StatedMonthlyIncome,y=LoanOriginalAmount), 
+       data=subset(pl,StatedMonthlyIncome<50000 & StatedMonthlyIncome>10 ) ) +
+  scale_x_log10() +
+  geom_jitter(color = 'red', alpha = 1/4) +
+  geom_smooth(method = 'lm', color = 'blue') +
+  ggtitle("Income vs. Loan Amount") +
+  xlab("Income - USD") + ylab("Loan Amount - USD")
+
+i3<-
+ggplot(aes(x=StatedMonthlyIncome,y=MonthlyLoanPayment),     
+       data=subset(pl,StatedMonthlyIncome<50000) ) +
+  geom_jitter(color = 'cyan', alpha = 1/4) +
+  geom_smooth() +
+  ggtitle("Income vs. Monthly Payment") +
+  xlab("Income - USD") + ylab("Monthly Payment - USD")
+
+grid.arrange(i1,i2,i3, ncol =1)
+```
+
+#### Description Two
+
+This shows that there are 'Defaulted' and 'Past Due' status in lower income and higher income ranges. I wonder why people are not paying off the loan on time if they get a good income. Maybe, there is something I am misising here.
+
+As the income increases, the loan amount for sure is increasing, yet, at the same time, the monthly loan payment is not. People probably feel more secure paying small amounts than big chunks. 
+This does not explain why there are defualters in High Income groups.
+
+### Plot Three: Loan Status in DC based on Homeowner Status
+```{r echo=FALSE, Plot_Three, message=FALSE, warning=FALSE}
+
+dc1 <- plDCCA %>%  filter(IsBorrowerHomeowner == 'False' & 
+                            BorrowerState == 'DC' ) %>% 
+  count(IsBorrowerHomeowner, LoanStatus) %>% 
+  ggplot(aes(IsBorrowerHomeowner, LoanStatus, fill = n)) +
+  geom_tile() +
+  xlab(" Not HomeOwner-DC") +
+  ylab("Loan Status") +
+  scale_fill_viridis(name="Count")
+  
+dc2 <- plDCCA %>%  filter(IsBorrowerHomeowner == 'True' & 
+                            BorrowerState == 'DC' ) %>% 
+  count(IsBorrowerHomeowner, LoanStatus) %>% 
+  ggplot(aes(IsBorrowerHomeowner, LoanStatus, fill = n)) +
+  geom_tile() +
+  xlab("HomeOwnerDC") +
+  ylab("Loan Status") +
+  scale_fill_viridis(name="Count") 
+  
+
+grid.arrange(dc1, dc2, ncol = 2) 
+```
+
+#### Description Three
+
+I noticed that owning a home or not in US does not seem to affect the loan status at all. Then i zoomed in on the CA+DC dataframe. In this combined dataframe also, I noticed there is not much change. I was still curious and filtered the data to get individual state graphs. CA also showed me the same graph where there is not much change whether one is a home owner or not.
+
+DC, on the other hand showed that those who own a home have more number of 'Completed', 'Charged off', & 'Current' status. Not only that, there are no 'Past Due (91-120 days)'. This is good since even if they are due they are not prolonging it and repaying the loan.
+
+Again, the employment status in DC is very good and also the income range is high. It makes sense that they are not much past due.
+
+The homeowners in DC have a better Loan status spectrum than others. Again, the Mean Loan Amount is highest in DC. So, if they are paying back on time, this defintely says a lot about their income ranges. Homeowner status might not be a cause of this but there seems to be a corelation. 
+
+
+
+# Reflection
+
+I have no exposure to Finance sector in general and Peer to Peer Loans system in particular. When I saw the options for the project, I was in two minds whether to choose this dataset or not. I decided to do it, since this would be a wonderful learning experience for me.
+At the first glimpse of the data, I have to admit, I was intimidated beyond measure seeing the observations and variable numbers. Yet, since it is mere exploration and visualization, with no right and wrong solutions, I decided to tread along.
+
+I reduced the variable number, based on what interested me. The univariate and bivariate graphs gave me a lot of perspective. I used this to furnish the multivariate plots. 
+I have not been able to rightly establish how the variables are related to each other. Yet, the graphs have shown that variables influence each other.
+
+California has the largest number of loans(borrowers) in the company and the mean Loan Amount is highest in DC. So, technically, a lot of money is circulating in these two states. Hence, I compared the variables of these two states and produced some multivariate plots.
+
+I also studied how Homeowner Status affects the Loan Status in US in general, in CA and DC together and again individually in CA and DC.
+
+I performed around 8 corelation tests. I decided to make 5 models using linear modelling. The Monthly Loan Payment and Loan Amount gave me a strong r-squared value of 0.86. The other models have something missing in them. I do not have thorough knowledge in this topic and hence have probably misinterpreted the relationship where none exist at all!?
+
+I summarized my whole exploration by presenting three plots of interest to me. This has been a good learning experience for me. I took up this task with zero knowledge of finance sector and now at least have an amatuer knowledge of how things in the P2P Loan sector. Apart from that, I have been able to put to test what I learnt about R from Udacity. I intend to study this more as and when I get time. The next time around I would like to consider other variables too. I definitely want to explore more on the Linear Modeling section and make necessary corrections based on what I learn from Udacity in the coming sections.
